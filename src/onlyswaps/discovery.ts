@@ -17,10 +17,10 @@ export interface SupportedPair {
 }
 
 export function listSupportedPairs(env: Environment): SupportedPair[] {
-  const isDev = env === 'development';
+  const isTestnetEnv = env === 'testnet';
   const isTestnet = (n: (typeof NETWORKS)[number]) => ('testnet' in n ? (n as any).testnet === true : false);
   const allowedChains = new Set(
-    NETWORKS.filter(n => (isDev ? isTestnet(n) : !isTestnet(n))).map(n => n.chainId)
+    NETWORKS.filter(n => (isTestnetEnv ? isTestnet(n) : !isTestnet(n))).map(n => n.chainId)
   );
 
   // Group tokens by symbol for the selected environment
@@ -55,7 +55,7 @@ export function listSupportedPairs(env: Environment): SupportedPair[] {
 
   // Special case: Mainnet USDT <-> Filecoin USDFC mapping (if both chains exist in current env)
   // This enables Base/Optimism/etc. USDT to map to Filecoin USDFC.
-  if (!isDev) {
+  if (!isTestnetEnv) {
     const filecoinChainId = 314;
     const filecoinTokens = TOKENS_BY_CHAIN[filecoinChainId] ?? [];
     const usdfc = filecoinTokens.find(t => t.symbol === 'USDFC');
@@ -127,7 +127,7 @@ export function resolveTokenMapping(args: {
   }
 
   // Mainnet special mapping: USDT on non-Filecoin <-> USDFC on Filecoin
-  if (args.env === 'production' && args.tokenSymbol === 'USDT') {
+  if (args.env === 'mainnet' && args.tokenSymbol === 'USDT') {
     const filecoinChainId = 314;
     const isSrcFilecoin = args.srcChainId === filecoinChainId;
     const isDstFilecoin = args.dstChainId === filecoinChainId;
@@ -160,9 +160,9 @@ export function suggestAlternatives(args: {
 }
 
 export function listTokenSymbolsForChain(env: Environment, chainId: number): OnlySwapsTokenSymbol[] {
-  const isDev = env === 'development';
+  const isTestnetEnv = env === 'testnet';
   const isTestnet = (n: (typeof NETWORKS)[number]) => ('testnet' in n ? (n as any).testnet === true : false);
-  const allowed = NETWORKS.some(n => n.chainId === chainId && (isDev ? isTestnet(n) : !isTestnet(n)));
+  const allowed = NETWORKS.some(n => n.chainId === chainId && (isTestnetEnv ? isTestnet(n) : !isTestnet(n)));
   if (!allowed) return [];
   const tokens = TOKENS_BY_CHAIN[chainId] ?? [];
   const symbols = new Set<OnlySwapsTokenSymbol>();

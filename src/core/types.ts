@@ -1,4 +1,4 @@
-export type Environment = 'development' | 'production';
+export type Environment = 'testnet' | 'mainnet';
 
 export interface ChainIds {
   base?: number;

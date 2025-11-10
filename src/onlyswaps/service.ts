@@ -2,7 +2,7 @@ import type { PublicClient, WalletClient } from 'viem';
 import { ViemChainBackend, RouterClient, fetchRecommendedFees } from 'onlyswaps-js';
 import type { Environment } from '../core/types.js';
 import type { OnlySwapsTokenSymbol } from './constants.js';
-import { resolveTokenMapping } from './discovery.js';
+import { resolveTokenMapping, getRouterAddress } from './discovery.js';
 
 export interface OnlySwapsServiceConfig {
     publicClient: PublicClient;
@@ -70,12 +70,16 @@ export interface FulfillmentReceipt {
  */
 export class OnlySwapsService {
     private router: RouterClient;
+    private readonly accountAddress: `0x${string}`;
+    private destRouterCache?: { chainId: number; client: RouterClient };
+    private readonly walletClient: WalletClient;
 
     constructor(config: OnlySwapsServiceConfig) {
         const accountAddress = config.walletClient.account?.address;
         if (!accountAddress) {
             throw new Error('WalletClient must have an account with an address');
         }
+        this.accountAddress = accountAddress as `0x${string}`;
 
         if (!config.publicClient.chain) {
             throw new Error('PublicClient must have a chain configured');
@@ -89,6 +93,8 @@ export class OnlySwapsService {
         // We've validated above that both clients have chains
         // The onlyswaps-js library types are stricter than viem's public types
         // Since we've validated the chains exist, we can safely pass the clients
+        this.walletClient = config.walletClient;
+
         const backend = new ViemChainBackend(
             accountAddress,
             config.publicClient as any,
@@ -200,12 +206,30 @@ export class OnlySwapsService {
 
         // Convert timestamp to Date if needed
         const requestedAtValue = params.requestedAt;
-        const requestedAt =
-            typeof requestedAtValue === 'number' || typeof requestedAtValue === 'bigint'
-                ? new Date(Number(requestedAtValue) * 1000)
-                : requestedAtValue && typeof requestedAtValue === 'object' && 'getTime' in requestedAtValue
-                    ? (requestedAtValue as Date)
-                    : new Date();
+        let requestedAt: Date;
+        if (requestedAtValue === null || requestedAtValue === undefined) {
+            // If no timestamp provided, use current time as fallback
+            requestedAt = new Date();
+        } else if (typeof requestedAtValue === 'number' || typeof requestedAtValue === 'bigint') {
+            const timestamp = Number(requestedAtValue);
+            // Handle case where timestamp might be 0 or very small (likely already in milliseconds)
+            if (timestamp === 0) {
+                requestedAt = new Date(); // Use current time if timestamp is 0
+            } else if (timestamp < 1000000000) {
+                // If timestamp is less than year 2001, assume it's in seconds
+                requestedAt = new Date(timestamp * 1000);
+            } else if (timestamp < 1000000000000) {
+                // If timestamp is less than year 2001 in milliseconds, assume seconds
+                requestedAt = new Date(timestamp * 1000);
+            } else {
+                // Otherwise assume milliseconds
+                requestedAt = new Date(timestamp);
+            }
+        } else if (requestedAtValue && typeof requestedAtValue === 'object' && 'getTime' in requestedAtValue) {
+            requestedAt = requestedAtValue as Date;
+        } else {
+            requestedAt = new Date();
+        }
 
         return {
             sender: params.sender as `0x${string}`,
@@ -250,11 +274,11 @@ export class OnlySwapsService {
     }
 
     /**
-     * Wait for a swap to be executed (verified by dcipher committee)
-     * Once executed, the solver can claim their reimbursement on the source chain
+     * Wait for a swap to be executed (verified by dcipher committee) or fulfilled (tokens received).
+     * Returns when either condition is met - fulfilled is checked first since it means tokens were received.
      * @param requestId The swap request ID
      * @param options Polling options
-     * @returns The request parameters and fulfillment receipt once executed
+     * @returns The request parameters and fulfillment receipt once executed or fulfilled
      */
     async waitForExecution(
         requestId: `0x${string}`,
@@ -262,35 +286,124 @@ export class OnlySwapsService {
             timeoutMs?: number;
             intervalMs?: number;
             onProgress?: (status: { elapsed: number; fulfilled: boolean; executed: boolean }) => void;
+            // Optional: more accurate destination-chain status using OnlySwaps SDK
+            destPublicClient?: PublicClient;
+            dstChainId?: number;
         } = {}
     ): Promise<{ params: RequestParams; fulfillment: FulfillmentReceipt }> {
         const { timeoutMs = 300000, intervalMs = 5000, onProgress } = options; // 5min timeout, 5s interval
         const startTime = Date.now();
 
-        while (true) {
-            const elapsed = Date.now() - startTime;
-
-            if (elapsed > timeoutMs) {
-                throw new Error(`Swap execution timeout after ${timeoutMs}ms`);
+        // Helper to fetch receipt from destination router using onlyswaps-js (if provided)
+        const fetchDestReceipt = async (): Promise<FulfillmentReceipt | undefined> => {
+            if (!options.destPublicClient || !options.dstChainId) return undefined;
+            // Reuse cached client per dstChainId
+            if (!this.destRouterCache || this.destRouterCache.chainId !== options.dstChainId) {
+                const destRouterAddress = getRouterAddress(options.dstChainId);
+                if (!destRouterAddress) return undefined;
+                const destBackend = new ViemChainBackend(
+                    this.accountAddress,
+                    options.destPublicClient as any,
+                    // Wallet client is not used for static calls, safe to reuse
+                    this.walletClient as any
+                );
+                this.destRouterCache = {
+                    chainId: options.dstChainId,
+                    client: new RouterClient({ routerAddress: destRouterAddress }, destBackend),
+                };
             }
+            const receipt = await this.destRouterCache.client.fetchFulfilmentReceipt(requestId);
+            // Normalize to our FulfillmentReceipt shape
+            const fulfilledAtValue = (receipt as any).fulfilledAt;
+            const fulfilledAt =
+                fulfilledAtValue && (typeof fulfilledAtValue === 'bigint' || typeof fulfilledAtValue === 'number')
+                    ? new Date(Number(fulfilledAtValue) * 1000)
+                    : undefined;
+            return {
+                requestId: (receipt as any).requestId as `0x${string}`,
+                fulfilled: (receipt as any).fulfilled as boolean,
+                solver: (receipt as any).solver as `0x${string}` | undefined,
+                recipient: (receipt as any).recipient as `0x${string}` | undefined,
+                amountOut: (receipt as any).amountOut ? BigInt((receipt as any).amountOut) : undefined,
+                fulfilledAt,
+            };
+        };
 
-            // Check both fulfillment and execution status
-            const [fulfillment, params] = await Promise.all([
+        // Check initial status - might already be executed or fulfilled
+        try {
+            const [initialFulfillment, initialParams] = await Promise.all([
                 this.fetchFulfillmentReceipt(requestId),
                 this.fetchRequestParams(requestId),
             ]);
 
-            if (onProgress) {
-                onProgress({
-                    elapsed,
-                    fulfilled: fulfillment.fulfilled,
-                    executed: params.executed,
-                });
+            // Return if executed (verified by dcipher) or fulfilled (tokens received)
+            if (initialParams.executed || initialFulfillment.fulfilled) {
+                return { params: initialParams, fulfillment: initialFulfillment };
+            }
+            // If destination public client is provided, check fulfillment on destination router too
+            const destReceipt = await fetchDestReceipt();
+            if (destReceipt?.fulfilled) {
+                return { params: initialParams, fulfillment: destReceipt };
+            }
+        } catch (error) {
+            // If initial check fails, continue with polling
+            // This might happen if the request is very new
+        }
+
+        while (true) {
+            const elapsed = Date.now() - startTime;
+
+            if (elapsed > timeoutMs) {
+                // Fetch final status before throwing to provide better error message
+                try {
+                    const [finalFulfillment, finalParams] = await Promise.all([
+                        this.fetchFulfillmentReceipt(requestId),
+                        this.fetchRequestParams(requestId),
+                    ]);
+                    throw new Error(
+                        `Swap execution timeout after ${timeoutMs}ms. Final status: executed=${finalParams.executed}, fulfilled=${finalFulfillment.fulfilled}`
+                    );
+                } catch (error) {
+                    if (error instanceof Error && error.message.includes('timeout')) {
+                        throw error;
+                    }
+                    throw new Error(`Swap execution timeout after ${timeoutMs}ms`);
+                }
             }
 
-            // Return once executed (verified by dcipher committee)
-            if (params.executed) {
-                return { params, fulfillment };
+            try {
+                // Check both fulfillment and execution status
+                const [fulfillment, params] = await Promise.all([
+                    this.fetchFulfillmentReceipt(requestId),
+                    this.fetchRequestParams(requestId),
+                ]);
+
+                if (onProgress) {
+                    onProgress({
+                        elapsed,
+                        fulfilled: fulfillment.fulfilled,
+                        executed: params.executed,
+                    });
+                }
+
+                // Return once executed (verified by dcipher committee) or fulfilled (tokens received)
+                // Fulfilled is more important since it means the user has received their tokens
+                if (params.executed || fulfillment.fulfilled) {
+                    return { params, fulfillment };
+                }
+
+                // Check destination router (if provided) for earlier fulfillment signal
+                const destReceipt = await fetchDestReceipt();
+                if (destReceipt?.fulfilled) {
+                    return { params, fulfillment: destReceipt };
+                }
+            } catch (error) {
+                // Log error but continue polling (might be temporary network issue)
+                // Only throw if we're past timeout
+                if (elapsed > timeoutMs - intervalMs) {
+                    throw error;
+                }
+                // Otherwise continue polling
             }
 
             // Wait before next poll
