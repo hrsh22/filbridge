@@ -1,7 +1,7 @@
 {
-  "name": "@autofi",
+  "name": "@autofi/sdk",
   "version": "0.1.0",
-  "description": "AutoFi SDK: OnlySwaps + Filecoin integrations, orchestrators, and agent",
+  "description": "FilBridge SDK: OnlySwaps + Filecoin integrations, orchestrators, and agent",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

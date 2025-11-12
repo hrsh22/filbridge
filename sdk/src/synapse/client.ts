@@ -7,11 +7,16 @@ import {
     type UserFile,
     type BackendStatus,
     type BridgeDepositResult,
+    type FundCreditsParams,
+    type FundCreditsResult,
+    type CreditBalance,
+    type CreditTransaction,
 } from './types.js';
 import {
     DEFAULT_BACKEND_URL,
-    PAYMENT_PER_UPLOAD_USDFC,
     FILECOIN_CHAIN_ID,
+    DEFAULT_BACKEND_FILECOIN_ADDRESS,
+    calculateStorageCost,
 } from './constants.js';
 
 export class SynapseStorageClient {
@@ -20,8 +25,8 @@ export class SynapseStorageClient {
     private backendAddress?: `0x${string}`;
 
     constructor(config: SynapseStorageConfig) {
-        this.backendUrl = config.backendUrl || DEFAULT_BACKEND_URL;
-        this.backendAddress = config.backendFilecoinAddress;
+        this.backendUrl = DEFAULT_BACKEND_URL;
+        this.backendAddress = DEFAULT_BACKEND_FILECOIN_ADDRESS;
 
         // Initialize OnlySwaps if wallet and public clients are provided
         if (config.walletClient && config.publicClient && config.routerAddress) {
@@ -75,24 +80,25 @@ export class SynapseStorageClient {
     }
 
     /**
-     * Bridge payment to backend wallet (internal method)
-     * Bridges 0.1 USDFC per upload
+     * Bridge USDFC to backend wallet (internal method)
+     * Used by fundCredits to transfer tokens
      */
     // @ts-ignore
     private async bridgePayment(params: {
         userAddress: `0x${string}`;
         sourceChainId: number;
         sourceTokenSymbol: 'USDT' | 'RUSD';
+        amount: bigint;
         destPublicClient?: PublicClient;
     }): Promise<BridgeDepositResult> {
         if (!this.onlySwaps) {
             throw new Error('OnlySwaps not initialized. Please provide walletClient, publicClient, and routerAddress in config.');
         }
 
-        console.log('Bridging payment to backend (0.1 USDFC)...');
+        console.log(`Bridging ${params.amount} USDFC wei to backend...`);
 
         // Get backend wallet address from config or environment
-        const backendAddress = this.backendAddress || process.env.BACKEND_FILECOIN_ADDRESS as `0x${string}`;
+        const backendAddress = this.backendAddress as `0x${string}`;
         if (!backendAddress) {
             throw new Error('Backend Filecoin address not configured. Pass backendFilecoinAddress in config or set BACKEND_FILECOIN_ADDRESS env var.');
         }
@@ -103,13 +109,13 @@ export class SynapseStorageClient {
         const isMainnet = params.sourceChainId === 8453 || params.sourceChainId === 1 || params.sourceChainId === 42161;
         const env = isMainnet ? 'mainnet' : 'testnet';
 
-        // Get recommended fees for 0.1 USDFC
+        // Get recommended fees for the specified amount
         const fees = await this.onlySwaps.fetchRecommendedFeesBySymbol({
             env: env as 'mainnet' | 'testnet',
             srcChainId: params.sourceChainId,
             dstChainId: FILECOIN_CHAIN_ID,
             tokenSymbol: params.sourceTokenSymbol,
-            amount: PAYMENT_PER_UPLOAD_USDFC,
+            amount: params.amount,
         });
 
         console.log('Bridge fees:', {
@@ -151,28 +157,100 @@ export class SynapseStorageClient {
     }
 
     /**
-     * Upload a file to Filecoin storage
-     * Automatically bridges 0.1 USDFC payment per upload
+     * Fund user's credit account by bridging USDFC
      */
-    async uploadFile(params: UploadFileParams): Promise<UploadResult> {
-        // @ts-ignore
-        const { file, fileName, userAddress, sourceChainId, sourceTokenSymbol } = params;
+    async fundCredits(params: FundCreditsParams): Promise<FundCreditsResult> {
+        if (!this.onlySwaps) {
+            throw new Error('OnlySwaps not initialized. Please provide walletClient, publicClient, and routerAddress in config.');
+        }
 
-        console.log(`Uploading file: ${fileName} for user ${userAddress}`);
+        console.log(`Funding credits: ${params.amount} wei for ${params.userAddress}`);
 
-        // 1. Bridge 0.1 USDFC to backend wallet
-        console.log('Step 1: Bridging payment (0.1 USDFC)...');
+        // Bridge USDFC to backend
         console.log('SKIPPING BRIDGING FOR NOW!!!! ENABLE LATER!!!!')
         const bridgeResult = {
-            bridgeRequestId: '0x1234567890',
+            bridgeRequestId: '0x1234567890' as `0x${string}`,
         }
         // const bridgeResult = await this.bridgePayment({
-        //     userAddress,
-        //     sourceChainId,
-        //     sourceTokenSymbol,
+        //     userAddress: params.userAddress,
+        //     sourceChainId: params.sourceChainId,
+        //     sourceTokenSymbol: params.sourceTokenSymbol,
+        //     amount: params.amount,
         // });
 
-        // 2. Convert file to blob for upload
+        // Notify backend to credit user account
+        const response = await fetch(`${this.backendUrl}/api/fund-credits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userAddress: params.userAddress,
+                amount: params.amount.toString(),
+                bridgeRequestId: bridgeResult.bridgeRequestId,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({})) as { message?: string };
+            throw new Error(`Failed to fund credits: ${errorData.message || response.statusText}`);
+        }
+
+        const result = await response.json() as { success: boolean; newBalance: string; amountAdded: string };
+
+        return {
+            bridgeRequestId: bridgeResult.bridgeRequestId,
+            amountFunded: params.amount.toString(),
+            newBalance: result.newBalance,
+        };
+    }
+
+    /**
+     * Get user's credit balance
+     */
+    async getCreditBalance(userAddress: `0x${string}`): Promise<CreditBalance> {
+        const response = await fetch(`${this.backendUrl}/api/credits/${userAddress}`);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch credit balance: ${response.statusText}`);
+        }
+
+        return await response.json() as CreditBalance;
+    }
+
+    /**
+     * Get user's credit transaction history
+     */
+    async getCreditHistory(userAddress: `0x${string}`, limit?: number): Promise<CreditTransaction[]> {
+        const url = limit
+            ? `${this.backendUrl}/api/credits/history/${userAddress}?limit=${limit}`
+            : `${this.backendUrl}/api/credits/history/${userAddress}`;
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch credit history: ${response.statusText}`);
+        }
+
+        const data = await response.json() as { transactions: CreditTransaction[] };
+        return data.transactions;
+    }
+
+    /**
+     * Calculate storage cost for a file
+     */
+    calculateStorageCost(fileSizeBytes: number, durationDays: number): bigint {
+        return calculateStorageCost(fileSizeBytes, durationDays);
+    }
+
+    /**
+     * Upload a file to Filecoin storage
+     * Uses credits from user's account (fund credits first using fundCredits)
+     */
+    async uploadFile(params: UploadFileParams): Promise<UploadResult> {
+        const { file, fileName, userAddress, storageDurationDays } = params;
+
+        console.log(`Uploading ${fileName} for ${storageDurationDays} days`);
+
+        // Convert file to blob for upload
         let fileData: Blob;
         if (file instanceof Uint8Array || Buffer.isBuffer(file)) {
             fileData = new Blob([file]);
@@ -182,19 +260,30 @@ export class SynapseStorageClient {
             throw new Error('Invalid file type. Expected File, Uint8Array, or Buffer.');
         }
 
-        // 3. Create FormData for multipart upload
+        // Create FormData for multipart upload
         const formData = new FormData();
         formData.append('file', fileData, fileName);
         formData.append('userAddress', userAddress);
-        formData.append('bridgeRequestId', bridgeResult.bridgeRequestId);
-        formData.append('paymentAmount', PAYMENT_PER_UPLOAD_USDFC.toString());
+        formData.append('storageDurationDays', storageDurationDays.toString());
 
-        // 4. Upload to backend
-        console.log('Step 2: Uploading file to backend...');
+        // Upload to backend
         const uploadResponse = await fetch(`${this.backendUrl}/api/initiate-storage`, {
             method: 'POST',
             body: formData,
         });
+
+        if (uploadResponse.status === 402) {
+            // Insufficient credits
+            const errorData = await uploadResponse.json() as {
+                error: string;
+                currentBalance: string;
+                requiredAmount: string;
+                message: string;
+            };
+            throw new Error(
+                `Insufficient credits. Balance: ${errorData.currentBalance} wei, Required: ${errorData.requiredAmount} wei. Please fund your account using fundCredits().`
+            );
+        }
 
         if (!uploadResponse.ok) {
             const errorData = await uploadResponse.json().catch(() => ({})) as { message?: string };

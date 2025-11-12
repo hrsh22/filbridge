@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "tsx src/server.ts",
+    "dev": "tsx watch --clear-screen=false --exclude node_modules --exclude dist src/server.ts",
     "setup-wallet": "tsx src/scripts/setup-wallet.ts"
   },
   "dependencies": {

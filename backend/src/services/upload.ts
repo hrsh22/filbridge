@@ -7,8 +7,8 @@ export interface ProcessUploadParams {
     fileBuffer: Buffer;
     userAddress: string;
     fileName: string;
-    bridgeRequestId: string | null;
-    paymentAmount: string;
+    storageDurationDays: number;
+    storageCost: string;
 }
 
 export class UploadService {
@@ -22,10 +22,10 @@ export class UploadService {
     }
 
     async processUpload(params: ProcessUploadParams): Promise<void> {
-        const { fileId, fileBuffer, userAddress, fileName } = params;
+        const { fileId, fileBuffer, userAddress, fileName, storageDurationDays, storageCost } = params;
 
         console.log(`Processing upload for file ${fileId} (${fileName}) from user ${userAddress}`);
-        console.log(`Payment: ${params.paymentAmount} USDFC (via bridge ${params.bridgeRequestId})`);
+        console.log(`Storage: ${storageDurationDays} days, Cost: ${storageCost} USDFC wei`);
 
         // Upload to Filecoin via Synapse with metadata
         let uploadResult;
@@ -51,10 +51,10 @@ export class UploadService {
         fileName: string;
         userAddress: string;
         fileId: string;
-        bridgeRequestId: string | null;
-        paymentAmount: string;
+        storageDurationDays: number;
+        storageCost: string;
     }): Promise<void> {
-        const { fileBuffer, fileName, userAddress, fileId, bridgeRequestId, paymentAmount } = params;
+        const { fileBuffer, fileName, userAddress, fileId, storageDurationDays, storageCost } = params;
 
         // Calculate file hash
         const fileHash = this.calculateFileHash(fileBuffer);
@@ -69,8 +69,8 @@ export class UploadService {
             file_hash: fileHash,
             commp: null,
             provider_id: null,
-            bridge_request_id: bridgeRequestId,
-            payment_amount: paymentAmount,
+            storage_duration_days: storageDurationDays,
+            storage_cost: storageCost,
         });
 
         // Process upload immediately
@@ -79,8 +79,8 @@ export class UploadService {
             fileBuffer,
             userAddress,
             fileName,
-            bridgeRequestId,
-            paymentAmount,
+            storageDurationDays,
+            storageCost,
         });
     }
 }

@@ -13,7 +13,7 @@ Cross-chain Filecoin storage SDK powered by Synapse SDK and OnlySwaps.
 ✅ **Automatic bridging** - Auto-converts USDT/USDC to USDFC via OnlySwaps  
 ✅ **Balance tracking** - Deposit once, upload multiple files  
 ✅ **Simple API** - Single method call for upload  
-✅ **Filecoin storage** - Files stored on Filecoin via Synapse SDK  
+✅ **Filecoin storage** - Files stored on Filecoin via Synapse SDK
 
 ## Installation
 
@@ -37,31 +37,31 @@ npm run dev
 ### 2. Initialize SDK
 
 ```typescript
-import { createWalletClient, createPublicClient, http } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
-import { SynapseStorageClient } from '@autofi/synapse';
-import { getRouterAddress } from '@autofi/onlyswaps';
+import { createWalletClient, createPublicClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+import { SynapseStorageClient } from "@autofi/synapse";
+import { getRouterAddress } from "@autofi/onlyswaps";
 
 // Setup wallet
-const account = privateKeyToAccount('0x...');
+const account = privateKeyToAccount("0x...");
 const walletClient = createWalletClient({
     account,
     chain: baseSepolia,
-    transport: http(),
+    transport: http()
 });
 
 const publicClient = createPublicClient({
     chain: baseSepolia,
-    transport: http(),
+    transport: http()
 });
 
 // Initialize storage client
 const storage = new SynapseStorageClient({
-    backendUrl: 'http://localhost:3001',
+    backendUrl: "http://localhost:3001",
     walletClient,
     publicClient,
-    routerAddress: getRouterAddress(baseSepolia.id),
+    routerAddress: getRouterAddress(baseSepolia.id)
 });
 ```
 
@@ -69,19 +69,19 @@ const storage = new SynapseStorageClient({
 
 ```typescript
 // Upload a file (automatically bridges if needed)
-const fileData = new TextEncoder().encode('Hello, Filecoin!');
+const fileData = new TextEncoder().encode("Hello, Filecoin!");
 
 const result = await storage.uploadFile({
     file: fileData,
-    fileName: 'hello.txt',
+    fileName: "hello.txt",
     userAddress: account.address,
     sourceChainId: baseSepolia.id,
-    sourceTokenSymbol: 'RUSD', // Testnet token
+    sourceTokenSymbol: "RUSD" // Testnet token
 });
 
-console.log('Upload complete!');
-console.log('File ID:', result.fileId);
-console.log('Status:', result.status);
+console.log("Upload complete!");
+console.log("File ID:", result.fileId);
+console.log("Status:", result.status);
 ```
 
 ### 4. List and Download Files
@@ -94,7 +94,7 @@ console.log(`You have ${files.length} files`);
 // Download a file
 if (files[0].commp) {
     const data = await storage.downloadFile(files[0].commp);
-    console.log('Downloaded:', new TextDecoder().decode(data));
+    console.log("Downloaded:", new TextDecoder().decode(data));
 }
 ```
 
@@ -111,6 +111,7 @@ new SynapseStorageClient(config: SynapseStorageConfig)
 ```
 
 **Parameters:**
+
 - `backendUrl` (string): Backend API URL
 - `walletClient` (WalletClient, optional): Viem wallet client for signing transactions
 - `publicClient` (PublicClient, optional): Viem public client for reading blockchain state
@@ -123,6 +124,7 @@ new SynapseStorageClient(config: SynapseStorageConfig)
 Upload a file to Filecoin. Automatically bridges tokens if user balance is insufficient.
 
 **Parameters:**
+
 - `file` (File | Uint8Array | Buffer): File data to upload
 - `fileName` (string): Original filename
 - `userAddress` (`0x${string}`): User's wallet address
@@ -130,6 +132,7 @@ Upload a file to Filecoin. Automatically bridges tokens if user balance is insuf
 - `sourceTokenSymbol` ('USDT' | 'RUSD'): Token to bridge
 
 **Returns:**
+
 ```typescript
 {
     fileId: string;
@@ -144,13 +147,14 @@ Upload a file to Filecoin. Automatically bridges tokens if user balance is insuf
 Check user's storage credit balance.
 
 **Returns:**
+
 ```typescript
 {
     userAddress: string;
-    balance: string;        // USDFC in wei
+    balance: string; // USDFC in wei
     totalDeposited: string; // Lifetime deposits
-    totalSpent: string;     // Lifetime spending
-    lastUpdated: number;    // Unix timestamp
+    totalSpent: string; // Lifetime spending
+    lastUpdated: number; // Unix timestamp
 }
 ```
 
@@ -159,6 +163,7 @@ Check user's storage credit balance.
 List all files uploaded by a user.
 
 **Returns:**
+
 ```typescript
 [{
     id: string;
@@ -183,6 +188,7 @@ Download a file from Filecoin by its CommP (content identifier).
 Check backend health and wallet status.
 
 **Returns:**
+
 ```typescript
 {
     status: 'healthy' | 'unhealthy';
@@ -227,8 +233,8 @@ User on Base (with USDT)
 ### File Metadata
 
 Files uploaded to Synapse include metadata:
+
 - **userAddress**: Owner's wallet address (stored on-chain)
-- **fileName**: Original filename
 
 This ensures ownership is verifiable on Filecoin itself, not just in the backend database.
 
@@ -237,22 +243,22 @@ This ensures ownership is verifiable on Filecoin itself, not just in the backend
 ### Upload from Base
 
 ```typescript
-import { SynapseStorageClient } from '@autofi/synapse';
-import { baseSepolia } from 'viem/chains';
+import { SynapseStorageClient } from "@autofi/synapse";
+import { baseSepolia } from "viem/chains";
 
 const storage = new SynapseStorageClient({
-    backendUrl: 'http://localhost:3001',
+    backendUrl: "http://localhost:3001",
     walletClient,
     publicClient,
-    routerAddress: getRouterAddress(baseSepolia.id),
+    routerAddress: getRouterAddress(baseSepolia.id)
 });
 
 const result = await storage.uploadFile({
     file: myFileData,
-    fileName: 'document.pdf',
+    fileName: "document.pdf",
     userAddress: account.address,
     sourceChainId: baseSepolia.id,
-    sourceTokenSymbol: 'RUSD',
+    sourceTokenSymbol: "RUSD"
 });
 ```
 
@@ -266,9 +272,9 @@ async function handleFileUpload(file: File) {
         fileName: file.name,
         userAddress: userAddress,
         sourceChainId: chainId,
-        sourceTokenSymbol: 'USDT',
+        sourceTokenSymbol: "USDT"
     });
-    
+
     console.log(`File uploaded! CommP: ${result.fileId}`);
 }
 ```
@@ -281,15 +287,15 @@ const latestFile = files[0];
 
 if (latestFile.commp) {
     const data = await storage.downloadFile(latestFile.commp);
-    
+
     // In Node.js
-    import { writeFileSync } from 'fs';
+    import { writeFileSync } from "fs";
     writeFileSync(latestFile.fileName, data);
-    
+
     // In browser
     const blob = new Blob([data]);
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = latestFile.fileName;
     a.click();
@@ -316,11 +322,11 @@ await storage.uploadFile({...});
 ### Constants
 
 ```typescript
-import { 
-    BRIDGE_AMOUNT_USDFC,       // 5 USDFC (default bridge amount)
+import {
+    BRIDGE_AMOUNT_USDFC, // 5 USDFC (default bridge amount)
     MINIMUM_BALANCE_THRESHOLD, // 1 USDFC (auto-bridge trigger)
-    FILECOIN_CHAIN_ID          // 314 (Filecoin mainnet)
-} from '@autofi/synapse';
+    FILECOIN_CHAIN_ID // 314 (Filecoin mainnet)
+} from "@autofi/synapse";
 ```
 
 ### Backend URL
@@ -416,4 +422,3 @@ This is a hackathon project built for the Synapse SDK cross-chain bounty. Contri
 ## License
 
 MIT
-

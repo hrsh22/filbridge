@@ -14,9 +14,27 @@ export interface UserFile {
     file_hash: string;
     commp: string | null;
     provider_id: string | null;
-    bridge_request_id: string | null;
-    payment_amount: string | null;
+    storage_duration_days: number;
+    storage_cost: string;
     uploaded_at: number | null;
+}
+
+export interface UserCredit {
+    user_address: string;
+    balance: string;
+    created_at: number;
+    updated_at: number;
+}
+
+export interface CreditTransaction {
+    id: string;
+    user_address: string;
+    type: 'deposit' | 'deduct';
+    amount: string;
+    file_id: string | null;
+    bridge_request_id: string | null;
+    description: string;
+    created_at: number;
 }
 
 export class Database {
@@ -38,12 +56,12 @@ export class Database {
         });
     }
 
-    // User File Operations (simplified - no balance tracking)
+    // User File Operations (credit-based)
     async createUserFile(file: Omit<UserFile, 'uploaded_at'>): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.run(
-                'INSERT INTO user_files (id, user_address, file_name, file_size, file_hash, commp, provider_id, bridge_request_id, payment_amount, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [file.id, file.user_address, file.file_name, file.file_size, file.file_hash, file.commp, file.provider_id, file.bridge_request_id, file.payment_amount, null],
+                'INSERT INTO user_files (id, user_address, file_name, file_size, file_hash, commp, provider_id, storage_duration_days, storage_cost, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [file.id, file.user_address, file.file_name, file.file_size, file.file_hash, file.commp, file.provider_id, file.storage_duration_days, file.storage_cost, null],
                 (err) => {
                     if (err) reject(err);
                     else resolve();
@@ -121,6 +139,82 @@ export class Database {
                 (err, row: UserFile | undefined) => {
                     if (err) reject(err);
                     else resolve(row || null);
+                }
+            );
+        });
+    }
+
+    // User Credit Operations
+    async getUserCredit(userAddress: string): Promise<UserCredit | null> {
+        return new Promise((resolve, reject) => {
+            this.db.get(
+                'SELECT * FROM user_credits WHERE user_address = ?',
+                [userAddress],
+                (err, row: UserCredit | undefined) => {
+                    if (err) reject(err);
+                    else resolve(row || null);
+                }
+            );
+        });
+    }
+
+    async createUserCredit(credit: Omit<UserCredit, 'created_at' | 'updated_at'>): Promise<void> {
+        const now = Date.now();
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'INSERT INTO user_credits (user_address, balance, created_at, updated_at) VALUES (?, ?, ?, ?)',
+                [credit.user_address, credit.balance, now, now],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    }
+
+    async updateUserCreditBalance(userAddress: string, newBalance: string): Promise<void> {
+        const now = Date.now();
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'UPDATE user_credits SET balance = ?, updated_at = ? WHERE user_address = ?',
+                [newBalance, now, userAddress],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    }
+
+    // Credit Transaction Operations
+    async createCreditTransaction(tx: Omit<CreditTransaction, 'created_at'>): Promise<void> {
+        const now = Date.now();
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'INSERT INTO credit_transactions (id, user_address, type, amount, file_id, bridge_request_id, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [tx.id, tx.user_address, tx.type, tx.amount, tx.file_id, tx.bridge_request_id, tx.description, now],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    }
+
+    async getCreditTransactions(userAddress: string, limit?: number): Promise<CreditTransaction[]> {
+        const query = limit
+            ? 'SELECT * FROM credit_transactions WHERE user_address = ? ORDER BY created_at DESC LIMIT ?'
+            : 'SELECT * FROM credit_transactions WHERE user_address = ? ORDER BY created_at DESC';
+
+        const params = limit ? [userAddress, limit] : [userAddress];
+
+        return new Promise((resolve, reject) => {
+            this.db.all(
+                query,
+                params,
+                (err, rows: CreditTransaction[]) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
                 }
             );
         });

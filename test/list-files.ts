@@ -33,14 +33,17 @@ async function main() {
         console.log(`Found ${files.length} file(s).\n`);
 
         files.forEach((file: any, index: number) => {
+            const costWei = BigInt(file.storageCost || '0');
+            const costUSDFC = Number(costWei / BigInt(10 ** 16)) / 100;
+
             console.log(`File #${index + 1}`);
             console.log(`  • ID: ${file.id}`);
             console.log(`  • Name: ${file.fileName}`);
-            console.log(`  • Size: ${file.fileSize} bytes`);
+            console.log(`  • Size: ${file.fileSize} bytes (${(file.fileSize / 1024).toFixed(2)} KB)`);
+            console.log(`  • Storage Duration: ${file.storageDurationDays} days`);
+            console.log(`  • Storage Cost: ${file.storageCost} wei (${costUSDFC.toFixed(6)} USDFC)`);
             console.log(`  • CommP: ${file.commp || 'pending'}`);
             console.log(`  • Provider: ${file.providerId || 'pending'}`);
-            console.log(`  • Payment: ${file.paymentAmount || '0'} wei`);
-            console.log(`  • Bridge ID: ${file.bridgeRequestId || 'n/a'}`);
             console.log(`  • Uploaded: ${file.uploadedAt ? new Date(file.uploadedAt).toISOString() : 'pending'}`);
             console.log('');
         });

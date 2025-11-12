@@ -1,17 +1,24 @@
 /**
- * @autofi/synapse - Cross-Chain Filecoin Storage Demo
+ * @autofi/synapse - Cross-Chain Filecoin Storage Demo (TESTNET)
  * 
- * This script demonstrates the complete flow:
- * 1. Bridge 0.1 USDFC from Base to backend wallet
- * 2. Upload test-upload.json to Filecoin via Synapse
- * 3. List user's files
- * 4. Download the file back from Filecoin
+ * This script demonstrates the complete credit-based flow:
+ * 1. Check current credit balance
+ * 2. Fund credits (bridge 1.0 USDFC from Base Sepolia to backend wallet)
+ * 3. Upload test-upload.json to Filecoin Calibration testnet using credits (30 days)
+ * 4. List user's files
+ * 5. Download the file back from Filecoin
+ * 6. Show remaining credits and transaction history
+ * 
+ * Requirements:
+ * - BASE_SEPOLIA_PRIVATE_KEY environment variable
+ * - RUSD tokens on Base Sepolia (get from faucet)
+ * - BACKEND_FILECOIN_ADDRESS environment variable (testnet address)
  */
 
 import { readFileSync } from 'node:fs';
-import { createWalletClient, createPublicClient, http } from 'viem';
+import { createWalletClient, createPublicClient, http, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { base } from 'viem/chains';
+import { baseSepolia } from 'viem/chains';
 import { SynapseStorageClient } from '../sdk/dist/synapse/index.js';
 import { getRouterAddress } from '../sdk/dist/onlyswaps/index.js';
 import dotenv from 'dotenv';
@@ -23,21 +30,28 @@ dotenv.config();
 // ============================================================================
 
 const CONFIG = {
-    // Your wallet private key (must have USDT on Base mainnet)
-    PRIVATE_KEY: process.env.BASE_MAINNET_PRIVATE_KEY as `0x${string}`,
+    // Your wallet private key (must have RUSD on Base Sepolia testnet)
+    PRIVATE_KEY: process.env.BASE_SEPOLIA_PRIVATE_KEY as `0x${string}`,
 
     // Backend API URL
     BACKEND_URL: 'http://localhost:3001',
 
     // Backend Filecoin wallet address (where payments go)
-    BACKEND_FILECOIN_ADDRESS: '0x6de669c9da78b62c7504d41412de43d3d7c7e9ef',
+    // This should be your testnet Filecoin wallet address
+    BACKEND_FILECOIN_ADDRESS: process.env.BACKEND_FILECOIN_ADDRESS as `0x${string}` || '0xd490fb9eee2578444cfa56d74b4afaf215efc269',
 
     // Network settings
-    CHAIN: base,                  // Base mainnet
-    SOURCE_TOKEN: 'USDT' as const, // Use USDT on mainnet
+    CHAIN: baseSepolia,           // Base Sepolia testnet
+    SOURCE_TOKEN: 'RUSD' as const, // Use RUSD on testnet
 
     // File to upload
     FILE_PATH: './test-upload.json',
+
+    // Credit funding amount (in USDFC)
+    FUND_AMOUNT: 1.0,
+
+    // Storage duration (in days)
+    STORAGE_DURATION: 30,
 };
 
 console.log('CONFIG: ', JSON.stringify(CONFIG, null, 2));
@@ -49,7 +63,7 @@ console.log('CONFIG: ', JSON.stringify(CONFIG, null, 2));
 async function main() {
     console.log('╔═══════════════════════════════════════════════════════════════╗');
     console.log('║  @autofi/synapse - Cross-Chain Filecoin Storage Demo         ║');
-    console.log('║  Making Synapse SDK accessible from ANY blockchain           ║');
+    console.log('║  TESTNET MODE: Base Sepolia → Filecoin Calibration           ║');
     console.log('╚═══════════════════════════════════════════════════════════════╝\n');
 
     // Validate configuration
@@ -67,7 +81,9 @@ async function main() {
     console.log(`   Network: ${CONFIG.CHAIN.name} (Chain ID: ${CONFIG.CHAIN.id})`);
     console.log(`   Token: ${CONFIG.SOURCE_TOKEN}`);
     console.log(`   Backend: ${CONFIG.BACKEND_URL}`);
-    console.log(`   File: ${CONFIG.FILE_PATH}\n`);
+    console.log(`   File: ${CONFIG.FILE_PATH}`);
+    console.log(`   Fund Amount: ${CONFIG.FUND_AMOUNT} USDFC`);
+    console.log(`   Storage Duration: ${CONFIG.STORAGE_DURATION} days\n`);
 
     // ========================================================================
     // STEP 1: Setup Wallet and Clients
@@ -141,11 +157,66 @@ async function main() {
     console.log('');
 
     // ========================================================================
-    // STEP 4: Read Test File
+    // STEP 4: Check Current Credit Balance
     // ========================================================================
 
     console.log('┌──────────────────────────────────────────────────────────────┐');
-    console.log('│ STEP 4: Reading Test File                                    │');
+    console.log('│ STEP 4: Checking Current Credit Balance                      │');
+    console.log('└──────────────────────────────────────────────────────────────┘\n');
+
+    let initialBalance = 0n;
+    try {
+        const balance = await storage.getCreditBalance(account.address);
+        initialBalance = BigInt(balance.balance);
+        const balanceUSDFC = Number(initialBalance / BigInt(10 ** 16)) / 100;
+        console.log(`✓ Current balance: ${balance.balance} wei (${balanceUSDFC.toFixed(4)} USDFC)\n`);
+    } catch (error) {
+        console.log('⚠️  No existing balance found (new user)\n');
+    }
+
+    // ========================================================================
+    // STEP 5: Fund Credits
+    // ========================================================================
+
+    console.log('┌──────────────────────────────────────────────────────────────┐');
+    console.log('│ STEP 5: Funding Credits                                      │');
+    console.log('│ (This will bridge USDFC from your wallet)                    │');
+    console.log('└──────────────────────────────────────────────────────────────┘\n');
+
+    console.log(`⏳ Funding ${CONFIG.FUND_AMOUNT} USDFC...`);
+    console.log(`   This will take ~30-60 seconds for bridging\n`);
+
+    const fundStartTime = Date.now();
+    const fundAmountWei = parseUnits(CONFIG.FUND_AMOUNT.toString(), 18);
+
+    try {
+        const fundResult = await storage.fundCredits({
+            amount: fundAmountWei,
+            userAddress: account.address,
+            sourceChainId: CONFIG.CHAIN.id,
+            sourceTokenSymbol: CONFIG.SOURCE_TOKEN,
+        });
+
+        const fundDuration = ((Date.now() - fundStartTime) / 1000).toFixed(1);
+        const newBalanceUSDFC = Number(BigInt(fundResult.newBalance) / BigInt(10 ** 16)) / 100;
+
+        console.log('\n✅ Credits Funded Successfully!');
+        console.log(`   Duration: ${fundDuration}s`);
+        console.log(`   Bridge ID: ${fundResult.bridgeRequestId}`);
+        console.log(`   Amount added: ${CONFIG.FUND_AMOUNT} USDFC`);
+        console.log(`   New balance: ${newBalanceUSDFC.toFixed(4)} USDFC\n`);
+    } catch (error) {
+        console.error('\n❌ Funding Failed!');
+        console.error(`   ${error instanceof Error ? error.message : 'Unknown error'}`);
+        process.exit(1);
+    }
+
+    // ========================================================================
+    // STEP 6: Read Test File
+    // ========================================================================
+
+    console.log('┌──────────────────────────────────────────────────────────────┐');
+    console.log('│ STEP 6: Reading Test File                                    │');
     console.log('└──────────────────────────────────────────────────────────────┘\n');
 
     let fileData: Uint8Array;
@@ -162,18 +233,35 @@ async function main() {
     }
 
     // ========================================================================
-    // STEP 5: Upload File to Filecoin (with auto-bridge)
+    // STEP 7: Calculate Storage Cost
     // ========================================================================
 
     console.log('┌──────────────────────────────────────────────────────────────┐');
-    console.log('│ STEP 5: Uploading File to Filecoin                           │');
-    console.log('│ (This will automatically bridge 0.1 USDFC from your wallet)  │');
+    console.log('│ STEP 7: Calculating Storage Cost                             │');
+    console.log('└──────────────────────────────────────────────────────────────┘\n');
+
+    const estimatedCost = storage.calculateStorageCost(fileData.length, CONFIG.STORAGE_DURATION);
+    const costUSDFC = Number(estimatedCost / BigInt(10 ** 16)) / 100;
+
+    console.log(`✓ Storage cost calculated:`);
+    console.log(`   File size: ${fileData.length} bytes`);
+    console.log(`   Duration: ${CONFIG.STORAGE_DURATION} days`);
+    console.log(`   Cost: ${estimatedCost} wei (${costUSDFC.toFixed(6)} USDFC)\n`);
+
+    // ========================================================================
+    // STEP 8: Upload File to Filecoin (using credits)
+    // ========================================================================
+
+    console.log('┌──────────────────────────────────────────────────────────────┐');
+    console.log('│ STEP 8: Uploading File to Filecoin                           │');
+    console.log('│ (Using credits from your account)                            │');
     console.log('└──────────────────────────────────────────────────────────────┘\n');
 
     console.log('⏳ Starting upload process...');
     console.log(`   User: ${account.address}`);
     console.log(`   File: ${CONFIG.FILE_PATH}`);
-    console.log(`   Payment: 0.1 USDFC (bridged from ${CONFIG.SOURCE_TOKEN})\n`);
+    console.log(`   Storage: ${CONFIG.STORAGE_DURATION} days`);
+    console.log(`   Cost: ${costUSDFC.toFixed(6)} USDFC\n`);
 
     const startTime = Date.now();
 
@@ -183,8 +271,7 @@ async function main() {
             file: fileData,
             fileName: 'test-upload.json',
             userAddress: account.address,
-            sourceChainId: CONFIG.CHAIN.id,
-            sourceTokenSymbol: CONFIG.SOURCE_TOKEN,
+            storageDurationDays: CONFIG.STORAGE_DURATION,
         });
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -193,6 +280,7 @@ async function main() {
         console.log(`   Duration: ${duration}s`);
         console.log(`   File ID: ${uploadResult.fileId}`);
         console.log(`   Status: ${uploadResult.status}`);
+        console.log(`   Cost: ${uploadResult.storageCost} wei`);
         console.log(`   Message: ${uploadResult.message}\n`);
     } catch (error) {
         console.error('\n❌ Upload Failed!');
@@ -201,11 +289,11 @@ async function main() {
     }
 
     // ========================================================================
-    // STEP 6: List User Files
+    // STEP 9: List User Files
     // ========================================================================
 
     console.log('┌──────────────────────────────────────────────────────────────┐');
-    console.log('│ STEP 6: Listing User Files                                   │');
+    console.log('│ STEP 9: Listing User Files                                   │');
     console.log('└──────────────────────────────────────────────────────────────┘\n');
 
     try {
@@ -214,13 +302,16 @@ async function main() {
         console.log(`✓ Found ${files.length} file(s) for user ${account.address}\n`);
 
         files.forEach((file: any, index: number) => {
+            const fileCostWei = BigInt(file.storageCost || '0');
+            const fileCostUSDFC = Number(fileCostWei / BigInt(10 ** 16)) / 100;
+
             console.log(`   File #${index + 1}:`);
             console.log(`   ├─ Name: ${file.fileName}`);
             console.log(`   ├─ Size: ${file.fileSize} bytes`);
+            console.log(`   ├─ Storage: ${file.storageDurationDays} days`);
+            console.log(`   ├─ Cost: ${fileCostUSDFC.toFixed(6)} USDFC`);
             console.log(`   ├─ CommP: ${file.commp || 'pending'}`);
             console.log(`   ├─ Provider: ${file.providerId || 'pending'}`);
-            console.log(`   ├─ Payment: ${file.paymentAmount} wei`);
-            console.log(`   ├─ Bridge ID: ${file.bridgeRequestId}`);
             console.log(`   └─ Uploaded: ${file.uploadedAt ? new Date(file.uploadedAt).toISOString() : 'pending'}`);
             console.log('');
         });
@@ -234,11 +325,11 @@ async function main() {
         }
 
         // ====================================================================
-        // STEP 7: Download File from Filecoin
+        // STEP 10: Download File from Filecoin
         // ====================================================================
 
         console.log('┌──────────────────────────────────────────────────────────────┐');
-        console.log('│ STEP 7: Downloading File from Filecoin                       │');
+        console.log('│ STEP 10: Downloading File from Filecoin                      │');
         console.log('└──────────────────────────────────────────────────────────────┘\n');
 
         console.log(`⏳ Downloading file with CommP: ${uploadedFile.commp}\n`);
@@ -268,26 +359,63 @@ async function main() {
     }
 
     // ========================================================================
+    // STEP 11: Check Remaining Credits and Transaction History
+    // ========================================================================
+
+    console.log('┌──────────────────────────────────────────────────────────────┐');
+    console.log('│ STEP 11: Checking Remaining Credits                          │');
+    console.log('└──────────────────────────────────────────────────────────────┘\n');
+
+    try {
+        const finalBalance = await storage.getCreditBalance(account.address);
+        const finalBalanceWei = BigInt(finalBalance.balance);
+        const finalBalanceUSDFC = Number(finalBalanceWei / BigInt(10 ** 16)) / 100;
+        const usedWei = initialBalance + fundAmountWei - finalBalanceWei;
+        const usedUSDFC = Number(usedWei / BigInt(10 ** 16)) / 100;
+
+        console.log(`✓ Final balance: ${finalBalance.balance} wei (${finalBalanceUSDFC.toFixed(4)} USDFC)`);
+        console.log(`   Credits used: ${usedWei} wei (${usedUSDFC.toFixed(6)} USDFC)\n`);
+
+        // Show recent transactions
+        const transactions = await storage.getCreditHistory(account.address, 5);
+        console.log(`📜 Recent Transactions (${transactions.length}):\n`);
+
+        transactions.forEach((tx: any, index: number) => {
+            const txAmountWei = BigInt(tx.amount);
+            const txAmountUSDFC = Number(txAmountWei / BigInt(10 ** 16)) / 100;
+            const sign = tx.type === 'deposit' ? '+' : '-';
+
+            console.log(`   ${index + 1}. ${tx.type.toUpperCase()}: ${sign}${txAmountUSDFC.toFixed(6)} USDFC`);
+            console.log(`      ${tx.description}`);
+        });
+    } catch (error) {
+        console.error('❌ Error fetching final balance:');
+        console.error(`   ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    // ========================================================================
     // DEMO COMPLETE
     // ========================================================================
 
-    console.log('╔═══════════════════════════════════════════════════════════════╗');
+    console.log('\n╔═══════════════════════════════════════════════════════════════╗');
     console.log('║  ✅ DEMO COMPLETE!                                            ║');
     console.log('╚═══════════════════════════════════════════════════════════════╝\n');
 
-    console.log('🎉 Success! You just uploaded a file to Filecoin from Base mainnet');
-    console.log('   without ever switching networks or needing a Filecoin wallet!\n');
+    console.log('🎉 Success! You just used the credit-based Filecoin storage system!');
+    console.log('   Uploaded a file to Filecoin from Base without switching networks!\n');
 
     console.log('📊 Summary:');
     console.log(`   • User stayed on: ${CONFIG.CHAIN.name}`);
-    console.log(`   • Paid with: ${CONFIG.SOURCE_TOKEN}`);
-    console.log(`   • Payment amount: 0.1 USDFC (+ OnlySwaps fees)`);
+    console.log(`   • Funded with: ${CONFIG.SOURCE_TOKEN} (bridged ${CONFIG.FUND_AMOUNT} USDFC)`);
+    console.log(`   • Storage duration: ${CONFIG.STORAGE_DURATION} days`);
+    console.log(`   • Storage cost: ${costUSDFC.toFixed(6)} USDFC`);
     console.log(`   • File stored on: Filecoin (via Synapse SDK)`);
-    console.log(`   • Ownership metadata: Recorded on-chain in Filecoin\n`);
+    console.log(`   • Credits never expire: Use anytime for future uploads\n`);
 
     console.log('🔑 Key Innovation:');
-    console.log('   This is the FIRST cross-chain Synapse SDK solution!');
-    console.log('   Users can access Filecoin storage from ANY blockchain.');
+    console.log('   Credit-based system: Fund once, use many times!');
+    console.log('   Cross-chain Synapse SDK: Access Filecoin from ANY blockchain.');
+    console.log('   Transparent costs: Exact Synapse SDK pricing formula.');
 }
 
 // Run the demo
@@ -298,8 +426,10 @@ main().catch((error) => {
     console.error('Error:', error);
     console.error('\nTroubleshooting:');
     console.error('1. Ensure backend is running: cd backend && npm run dev');
-    console.error('2. Check your PRIVATE_KEY is correct and has USDT on Base');
-    console.error('3. Verify BACKEND_FILECOIN_ADDRESS is set correctly');
-    console.error('4. Make sure backend has USDFC and FIL for gas\n');
+    console.error('2. Check your BASE_SEPOLIA_PRIVATE_KEY is correct and has RUSD on Base Sepolia');
+    console.error('3. Verify BACKEND_FILECOIN_ADDRESS is set correctly (testnet address)');
+    console.error('4. Make sure backend has USDFC and FIL for gas on Calibration testnet');
+    console.error('5. Check credit balance: npm run check-credits');
+    console.error('6. Get testnet tokens: Base Sepolia faucet for RUSD, Filecoin faucet for FIL\n');
     process.exit(1);
 });
