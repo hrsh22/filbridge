@@ -84,6 +84,34 @@ export function listSupportedPairs(env: Environment): SupportedPair[] {
     }
   }
 
+  // Special case: Testnet FUSD <-> Filecoin Calibration USDFC mapping
+  // This enables Base Sepolia FUSD to map to Filecoin Calibration USDFC.
+  if (isTestnetEnv) {
+    const filecoinCalibrationChainId = 314159;
+    const baseSepoliaChainId = 84532;
+    const filecoinTokens = TOKENS_BY_CHAIN[filecoinCalibrationChainId] ?? [];
+    const baseSepoliaTokens = TOKENS_BY_CHAIN[baseSepoliaChainId] ?? [];
+    const usdfc = filecoinTokens.find(t => t.symbol === 'USDFC');
+    const fusd = baseSepoliaTokens.find(t => t.symbol === 'FUSD');
+    if (usdfc && fusd && allowedChains.has(filecoinCalibrationChainId) && allowedChains.has(baseSepoliaChainId)) {
+      // Add bidirectional pairs: Base Sepolia FUSD <-> Filecoin Calibration USDFC
+      pairs.push({
+        srcChainId: baseSepoliaChainId,
+        dstChainId: filecoinCalibrationChainId,
+        tokenSymbol: 'FUSD', // canonical symbol for the pair
+        srcTokenAddress: fusd.address,
+        dstTokenAddress: usdfc.address,
+      });
+      pairs.push({
+        srcChainId: filecoinCalibrationChainId,
+        dstChainId: baseSepoliaChainId,
+        tokenSymbol: 'FUSD',
+        srcTokenAddress: usdfc.address,
+        dstTokenAddress: fusd.address,
+      });
+    }
+  }
+
   return pairs;
 }
 
@@ -139,6 +167,31 @@ export function resolveTokenMapping(args: {
         undefined;
       const dst =
         (isDstFilecoin ? dstTokens.find(t => t.symbol === 'USDFC') : dstTokens.find(t => t.symbol === 'USDT')) ??
+        undefined;
+      if (src && dst) {
+        return { srcTokenAddress: src.address, dstTokenAddress: dst.address };
+      }
+    }
+  }
+
+  // Testnet special mapping: FUSD on Base Sepolia <-> USDFC on Filecoin Calibration
+  if (args.env === 'testnet' && args.tokenSymbol === 'FUSD') {
+    const filecoinCalibrationChainId = 314159;
+    const baseSepoliaChainId = 84532;
+    const isSrcFilecoin = args.srcChainId === filecoinCalibrationChainId;
+    const isDstFilecoin = args.dstChainId === filecoinCalibrationChainId;
+    const isSrcBaseSepolia = args.srcChainId === baseSepoliaChainId;
+    const isDstBaseSepolia = args.dstChainId === baseSepoliaChainId;
+
+    // Only allow Base Sepolia <-> Filecoin Calibration mapping
+    if ((isSrcBaseSepolia && isDstFilecoin) || (isSrcFilecoin && isDstBaseSepolia)) {
+      const srcTokens = TOKENS_BY_CHAIN[args.srcChainId] ?? [];
+      const dstTokens = TOKENS_BY_CHAIN[args.dstChainId] ?? [];
+      const src =
+        (isSrcFilecoin ? srcTokens.find(t => t.symbol === 'USDFC') : srcTokens.find(t => t.symbol === 'FUSD')) ??
+        undefined;
+      const dst =
+        (isDstFilecoin ? dstTokens.find(t => t.symbol === 'USDFC') : dstTokens.find(t => t.symbol === 'FUSD')) ??
         undefined;
       if (src && dst) {
         return { srcTokenAddress: src.address, dstTokenAddress: dst.address };

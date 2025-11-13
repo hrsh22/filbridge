@@ -58,7 +58,7 @@ export default function Home() {
                 <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b-4 border-black">
                     <div className="space-y-2">
                         <h1 className="text-5xl font-black text-black">FILBRIDGE</h1>
-                        <p className="text-base font-bold text-black">DECENTRALIZED STORAGE PLATFORM</p>
+                        <p className="text-base font-bold text-black">DECENTRALIZED STORAGE PLATFORM FOR FILBRIDGE DEMO</p>
                     </div>
                     <WalletButton />
                 </header>

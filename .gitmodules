@@ -1,0 +1,4 @@
+[submodule "sdk/onlyswaps-js"]
+	path = sdk/onlyswaps-js
+	url = https://github.com/randa-mu/onlyswaps-js.git
+	branch = feat/gasless-and-mixed-decimal-support

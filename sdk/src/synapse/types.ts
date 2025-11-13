@@ -67,7 +67,7 @@ export interface FundCreditsParams {
     amount: bigint;  // USDFC wei to deposit
     userAddress: `0x${string}`;
     sourceChainId: number;
-    sourceTokenSymbol: 'USDT' | 'RUSD';
+    sourceTokenSymbol: 'USDT' | 'RUSD' | 'FUSD';
 }
 
 export interface FundCreditsResult {

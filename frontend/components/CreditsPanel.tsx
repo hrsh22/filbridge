@@ -83,9 +83,11 @@ export function CreditsPanel() {
         fetchData();
     }, [fetchData, prerequisites]);
 
+    const TOKEN_DECIMALS = 6;
+
     const balance = useMemo(() => {
         try {
-            return formatUnits(BigInt(balanceWei), 18);
+            return formatUnits(BigInt(balanceWei), TOKEN_DECIMALS);
         } catch {
             return "0";
         }
@@ -99,14 +101,21 @@ export function CreditsPanel() {
         try {
             setLoading(true);
             setMsg("");
-            const wei = parseUnits(amount || "0", 18);
+            const wei = parseUnits(amount || "0", TOKEN_DECIMALS);
+            console.log("[CreditsPanel] Funding credits:", {
+                amount: wei,
+                userAddress: address,
+                sourceChainId: baseSepolia.id,
+                sourceTokenSymbol: "FUSD"
+            });
             const result = await client.fundCredits({
                 amount: wei,
                 userAddress: address as `0x${string}`,
                 sourceChainId: baseSepolia.id,
-                sourceTokenSymbol: "RUSD"
+                sourceTokenSymbol: "FUSD"
             });
-            setMsg(`Funded: ${formatUnits(BigInt(result.amountFunded), 18)} USDFC (bridgeId: ${result.bridgeRequestId})`);
+            console.log("[CreditsPanel] Funding credits result:", result);
+            setMsg(`Funded: ${formatUnits(BigInt(result.amountFunded), TOKEN_DECIMALS)} USDFC (bridgeId: ${result.bridgeRequestId})`);
             await fetchData();
         } catch (e: any) {
             setMsg(e?.message || "Funding failed");
@@ -238,7 +247,7 @@ export function CreditsPanel() {
                             </div>
                         ) : (
                             history.map((t) => {
-                                const amountFormatted = formatUnits(BigInt(t.amount), 18);
+                                const amountFormatted = formatUnits(BigInt(t.amount), TOKEN_DECIMALS);
                                 const isCreditTx = isCredit(t.type);
 
                                 return (
@@ -256,10 +265,7 @@ export function CreditsPanel() {
                                                 )}
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <div 
-                                                    className="text-sm font-black text-black truncate uppercase" 
-                                                    title={t.type}
-                                                >
+                                                <div className="text-sm font-black text-black truncate uppercase" title={t.type}>
                                                     {t.type}
                                                 </div>
                                                 <div className="text-xs font-bold text-black">{formatDate(t.createdAt)}</div>

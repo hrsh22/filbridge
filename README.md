@@ -101,7 +101,7 @@ await storage.fundCredits({
     amount: parseUnits("10", 18), // 10 USDFC
     userAddress: account.address,
     sourceChainId: baseSepolia.id,
-    sourceTokenSymbol: "RUSD" // or "USDT"/"USDC" on mainnet
+    sourceTokenSymbol: "FUSD"
 });
 
 // 2. Upload file (cost deducted from credits)

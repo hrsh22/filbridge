@@ -49,7 +49,7 @@ npm run build
 Create a `.env` file in the `test` folder:
 
 ```bash
-# Your Base wallet private key (must have RUSD for funding)
+# Your Base wallet private key (must have FUSD for funding)
 BASE_SEPOLIA_PRIVATE_KEY=0x...
 ```
 
@@ -57,7 +57,7 @@ BASE_SEPOLIA_PRIVATE_KEY=0x...
 
 Your wallet needs:
 
-- **Base mainnet RUSD** (for funding credits + OnlySwaps fees)
+- **Base mainnet FUSD** (for funding credits + OnlySwaps fees)
 - **Base ETH** (for gas fees)
 
 ## Available Scripts

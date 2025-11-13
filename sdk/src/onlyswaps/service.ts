@@ -3,6 +3,27 @@ import { ViemChainBackend, RouterClient, fetchRecommendedFees } from 'onlyswaps-
 import type { Environment } from '../core/types.js';
 import type { OnlySwapsTokenSymbol } from './constants.js';
 import { resolveTokenMapping, getRouterAddress } from './discovery.js';
+import { TOKENS_BY_CHAIN } from './constants.js';
+
+function getTokenDecimals(chainId: number, tokenAddress: `0x${string}`): number | undefined {
+    const tokens = TOKENS_BY_CHAIN[chainId];
+    if (!tokens) return undefined;
+    const lower = tokenAddress.toLowerCase();
+    const token = tokens.find(entry => entry.address.toLowerCase() === lower);
+    return token?.decimals;
+}
+
+function scaleAmount(amount: bigint, srcDecimals?: number, dstDecimals?: number): bigint {
+    if (srcDecimals === undefined || dstDecimals === undefined || srcDecimals === dstDecimals) {
+        return amount;
+    }
+    if (srcDecimals > dstDecimals) {
+        const factor = 10n ** BigInt(srcDecimals - dstDecimals);
+        return amount / factor;
+    }
+    const factor = 10n ** BigInt(dstDecimals - srcDecimals);
+    return amount * factor;
+}
 
 export interface OnlySwapsServiceConfig {
     publicClient: PublicClient;
@@ -32,6 +53,8 @@ export interface SwapParams {
     srcToken: `0x${string}`;
     dstToken: `0x${string}`;
     amount: bigint;
+    amountIn?: bigint;
+    amountOut?: bigint;
     recipient: `0x${string}`;
     solverFee: bigint;
 }
@@ -154,18 +177,36 @@ export class OnlySwapsService {
      * Execute a cross-chain swap
      */
     async swap(params: SwapParams): Promise<SwapResult> {
-        const result = await this.router.swap({
-            srcToken: params.srcToken,
-            destToken: params.dstToken,
-            amount: params.amount,
-            fee: params.solverFee,
-            destChainId: BigInt(params.dstChainId),
-            recipient: params.recipient,
-        });
+        const amountIn = params.amountIn ?? params.amount;
+        const srcDecimals = getTokenDecimals(params.srcChainId, params.srcToken);
+        const dstDecimals = getTokenDecimals(params.dstChainId, params.dstToken);
 
-        return {
-            requestId: result.requestId as `0x${string}`,
-        };
+        const shouldDeriveAmountOut = params.amountOut === undefined || params.amountOut === params.amount;
+        const amountOut = shouldDeriveAmountOut
+            ? scaleAmount(amountIn, srcDecimals, dstDecimals)
+            : params.amountOut!;
+
+        const totalAmountIn = amountIn + params.solverFee;
+
+        try {
+            const result = await this.router.swap({
+                srcToken: params.srcToken,
+                destToken: params.dstToken,
+                amountIn,
+                amountOut,
+                totalAmountIn,
+                fee: params.solverFee,
+                destChainId: BigInt(params.dstChainId),
+                recipient: params.recipient,
+            });
+
+            return {
+                requestId: result.requestId as `0x${string}`,
+            };
+        } catch (error) {
+            console.error("[OnlySwapsService] Error swapping:", error);
+            throw error;
+        }
     }
 
     /**
@@ -193,6 +234,8 @@ export class OnlySwapsService {
             srcToken: mapping.srcTokenAddress,
             dstToken: mapping.dstTokenAddress,
             amount: params.amount,
+            amountIn: params.amount,
+            amountOut: params.amount,
             recipient: params.recipient,
             solverFee: params.solverFee,
         });

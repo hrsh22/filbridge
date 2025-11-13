@@ -12,7 +12,7 @@ Classic demo UI that showcases using our SDK from a user's wallet on testnet:
 - Backend running locally: `http://localhost:3001`
 - SDK built at `../sdk/dist`
 - Testnet:
-    - Source: Base Sepolia (84532) with RUSD
+    - Source: Base Sepolia (84532) with FUSD
     - Destination: Filecoin Calibration (314159)
 
 ## Setup

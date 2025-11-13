@@ -11,6 +11,7 @@ import {
     scroll,
     baseSepolia,
     avalancheFuji,
+    filecoinCalibration,
 } from 'viem/chains';
 
 export interface OnlySwapsNetwork {
@@ -20,7 +21,7 @@ export interface OnlySwapsNetwork {
 }
 
 export interface OnlySwapsToken {
-    symbol: 'USDT' | 'USDFC' | 'RUSD';
+    symbol: 'USDT' | 'USDFC' | 'RUSD' | 'FUSD';
     chainId: number;
     address: `0x${string}`;
     decimals?: number;
@@ -45,7 +46,9 @@ export const MAINNET_NETWORKS = [
 export const TESTNET_NETWORKS = [
     { chainId: 5042002, router: '0x8F224903363E1DD8B66b9f83DE37f48E5d10f33C' as const, testnet: true }, // Arc
     { chainId: 43113, router: '0xC69DD549B037215BA1Ea9866FFa59603862bf986' as const, testnet: true },   // Avalanche Fuji
-    { chainId: 84532, router: '0xC69DD549B037215BA1Ea9866FFa59603862bf986' as const, testnet: true },   // Base Sepolia
+    // { chainId: 84532, router: '0xC69DD549B037215BA1Ea9866FFa59603862bf986' as const, testnet: true },   // Base Sepolia - RUSD token
+    { chainId: 84532, router: '0xB8090bB54d472105af98384f0159572c7FFea813' as const, testnet: true },   // Base Sepolia - FUSD token
+    { chainId: 314159, router: '0xbcb32159242629D859b0bFC7A55f4A91B2B3D53f' as const, testnet: true },   // Filecoin Calibration
 ] as const satisfies readonly OnlySwapsNetwork[];
 
 export const NETWORKS = [
@@ -56,22 +59,24 @@ export const NETWORKS = [
 // Tokens (docs)
 // Mainnet
 export const MAINNET_TOKENS = [
-    { symbol: 'USDFC', chainId: 314, address: '0x80B98d3aa09ffff255c3ba4A241111Ff1262F045' as const },
-    { symbol: 'USDT', chainId: 42161, address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9' as const },
-    { symbol: 'USDT', chainId: 43114, address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7' as const },
-    { symbol: 'USDT', chainId: 8453, address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2' as const },
-    { symbol: 'USDT', chainId: 56, address: '0x55d398326f99059ff775485246999027b3197955' as const },
-    { symbol: 'USDT', chainId: 1, address: '0xdac17f958d2ee523a2206206994597c13d831ec7' as const },
-    { symbol: 'USDT', chainId: 59144, address: '0xA219439258ca9da29E9Cc4cE5596924745e12B93' as const },
-    { symbol: 'USDT', chainId: 10, address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58' as const },
-    { symbol: 'USDT', chainId: 534352, address: '0xf55bec9cafdbe8730f096aa55dad6d22d44099df' as const },
+    { symbol: 'USDFC', chainId: 314, address: '0x80B98d3aa09ffff255c3ba4A241111Ff1262F045' as const, decimals: 6 },
+    { symbol: 'USDT', chainId: 42161, address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9' as const, decimals: 18 },
+    { symbol: 'USDT', chainId: 43114, address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7' as const, decimals: 18 },
+    { symbol: 'USDT', chainId: 8453, address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2' as const, decimals: 18 },
+    { symbol: 'USDT', chainId: 56, address: '0x55d398326f99059ff775485246999027b3197955' as const, decimals: 18 },
+    { symbol: 'USDT', chainId: 1, address: '0xdac17f958d2ee523a2206206994597c13d831ec7' as const, decimals: 18 },
+    { symbol: 'USDT', chainId: 59144, address: '0xA219439258ca9da29E9Cc4cE5596924745e12B93' as const, decimals: 18 },
+    { symbol: 'USDT', chainId: 10, address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58' as const, decimals: 18 },
+    { symbol: 'USDT', chainId: 534352, address: '0xf55bec9cafdbe8730f096aa55dad6d22d44099df' as const, decimals: 18 },
 ] as const satisfies readonly OnlySwapsToken[];
 
 // Testnet (RUSD faucet token)
 export const TESTNET_TOKENS = [
     { symbol: 'RUSD', chainId: 5042002, address: '0xeEFEBadf8f73192D210a64C97bC032C51f995666' as const, testnet: true }, // Arc
     { symbol: 'RUSD', chainId: 43113, address: '0x908e1D85604E0e9e703d52D18f3f3f604Fe7Bb1b' as const, testnet: true },   // Fuji
-    { symbol: 'RUSD', chainId: 84532, address: '0x908e1D85604E0e9e703d52D18f3f3f604Fe7Bb1b' as const, testnet: true },  // Base Sepolia
+    { symbol: 'RUSD', chainId: 84532, address: '0x908e1D85604E0e9e703d52D18f3f3f604Fe7Bb1b' as const, testnet: true },  // Base Sepolia - RUSD token
+    { symbol: 'FUSD', chainId: 84532, address: '0xe3B0F6a4F29f5919d51C56Bad60788Aaeecec71f' as const, testnet: true, decimals: 6 },  // Base Sepolia - FUSD token
+    { symbol: 'USDFC', chainId: 314159, address: '0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0' as const, testnet: true, decimals: 6 },  // Filecoin Calibration
 ] as const satisfies readonly OnlySwapsToken[];
 
 export const TOKENS = [
@@ -117,4 +122,5 @@ export const CHAIN_MAP: Record<OnlySwapsChainId, Chain> = {
     5042002: baseSepolia, // Arc testnet uses Base Sepolia config
     43113: avalancheFuji,
     84532: baseSepolia,
+    314159: filecoinCalibration,
 } as const;

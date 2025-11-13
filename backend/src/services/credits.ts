@@ -3,7 +3,7 @@ import { calculateStorageCost } from '../constants.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export class CreditService {
-    constructor(private db: Database) {}
+    constructor(private db: Database) { }
 
     /**
      * Get user's current credit balance
@@ -94,7 +94,7 @@ export class CreditService {
      * Calculate storage cost for a file
      */
     calculateCost(fileSizeBytes: number, durationDays: number): bigint {
-        return calculateStorageCost(fileSizeBytes, durationDays);
+        return calculateStorageCost(fileSizeBytes, durationDays) / 10n ** 12n;
     }
 }
 

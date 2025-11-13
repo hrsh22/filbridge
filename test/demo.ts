@@ -11,7 +11,7 @@
  * 
  * Requirements:
  * - BASE_SEPOLIA_PRIVATE_KEY environment variable
- * - RUSD tokens on Base Sepolia (get from faucet)
+ * - FUSD tokens on Base Sepolia (get from faucet)
  * - BACKEND_FILECOIN_ADDRESS environment variable (testnet address)
  */
 
@@ -30,7 +30,7 @@ dotenv.config();
 // ============================================================================
 
 const CONFIG = {
-    // Your wallet private key (must have RUSD on Base Sepolia testnet)
+    // Your wallet private key (must have FUSD on Base Sepolia testnet)
     PRIVATE_KEY: process.env.BASE_SEPOLIA_PRIVATE_KEY as `0x${string}`,
 
     // Backend API URL
@@ -42,7 +42,7 @@ const CONFIG = {
 
     // Network settings
     CHAIN: baseSepolia,           // Base Sepolia testnet
-    SOURCE_TOKEN: 'RUSD' as const, // Use RUSD on testnet
+    SOURCE_TOKEN: 'FUSD' as const, // Use FUSD on testnet
 
     // File to upload
     FILE_PATH: './test-upload.json',
@@ -426,10 +426,10 @@ main().catch((error) => {
     console.error('Error:', error);
     console.error('\nTroubleshooting:');
     console.error('1. Ensure backend is running: cd backend && npm run dev');
-    console.error('2. Check your BASE_SEPOLIA_PRIVATE_KEY is correct and has RUSD on Base Sepolia');
+    console.error('2. Check your BASE_SEPOLIA_PRIVATE_KEY is correct and has FUSD on Base Sepolia');
     console.error('3. Verify BACKEND_FILECOIN_ADDRESS is set correctly (testnet address)');
     console.error('4. Make sure backend has USDFC and FIL for gas on Calibration testnet');
     console.error('5. Check credit balance: npm run check-credits');
-    console.error('6. Get testnet tokens: Base Sepolia faucet for RUSD, Filecoin faucet for FIL\n');
+    console.error('6. Get testnet tokens: Base Sepolia faucet for FUSD, Filecoin faucet for FIL\n');
     process.exit(1);
 });

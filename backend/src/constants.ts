@@ -5,10 +5,10 @@ export const SYNAPSE_COSTS = {
     // Rate: ongoing cost per byte per epoch
     // Placeholder values - should be updated with actual testnet values from Synapse contracts
     BYTES_RATE: 100n,
-    
+
     // Lockup: upfront deposit per byte (returned when storage ends)
     BYTES_LOCKUP: 1000n,
-    
+
     // Time constants
     EPOCH_DURATION_SECONDS: 30,
     EPOCHS_PER_DAY: 2880n,
@@ -34,13 +34,13 @@ export const SYNAPSE_COSTS = {
 export function calculateStorageCost(fileSizeBytes: number, durationDays: number): bigint {
     const durationEpochs = BigInt(durationDays) * SYNAPSE_COSTS.EPOCHS_PER_DAY;
     const fileSize = BigInt(fileSizeBytes);
-    
+
     // Rate cost: ongoing cost over the storage period
     const rateCost = fileSize * SYNAPSE_COSTS.BYTES_RATE * durationEpochs;
-    
+
     // Lockup cost: upfront deposit (returned when storage ends)
     const lockupCost = fileSize * SYNAPSE_COSTS.BYTES_LOCKUP;
-    
+
     return rateCost + lockupCost;
 }
 

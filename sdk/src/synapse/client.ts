@@ -87,7 +87,7 @@ export class SynapseStorageClient {
     private async bridgePayment(params: {
         userAddress: `0x${string}`;
         sourceChainId: number;
-        sourceTokenSymbol: 'USDT' | 'RUSD';
+        sourceTokenSymbol: 'USDT' | 'RUSD' | 'FUSD';
         amount: bigint;
         destPublicClient?: PublicClient;
     }): Promise<BridgeDepositResult> {
@@ -108,7 +108,7 @@ export class SynapseStorageClient {
         // Testnet chains: Base Sepolia (84532), etc.
         const isMainnet = params.sourceChainId === 8453 || params.sourceChainId === 1 || params.sourceChainId === 42161;
         const env = isMainnet ? 'mainnet' : 'testnet';
-
+        console.log("ENV in synapse client:", env);
         // Get recommended fees for the specified amount
         const fees = await this.onlySwaps.fetchRecommendedFeesBySymbol({
             env: env as 'mainnet' | 'testnet',
@@ -168,15 +168,21 @@ export class SynapseStorageClient {
 
         // Bridge USDFC to backend
         console.log('SKIPPING BRIDGING FOR NOW!!!! ENABLE LATER!!!!')
-        const bridgeResult = {
-            bridgeRequestId: '0x1234567890' as `0x${string}`,
-        }
-        // const bridgeResult = await this.bridgePayment({
-        //     userAddress: params.userAddress,
-        //     sourceChainId: params.sourceChainId,
-        //     sourceTokenSymbol: params.sourceTokenSymbol,
-        //     amount: params.amount,
-        // });
+        // const bridgeResult = {
+        //     bridgeRequestId: '0x1234567890' as `0x${string}`,
+        // }
+        console.log("[SynapseStorageClient] Funding credits:", {
+            userAddress: params.userAddress,
+            sourceChainId: params.sourceChainId,
+            sourceTokenSymbol: params.sourceTokenSymbol,
+            amount: params.amount,
+        });
+        const bridgeResult = await this.bridgePayment({
+            userAddress: params.userAddress,
+            sourceChainId: params.sourceChainId,
+            sourceTokenSymbol: params.sourceTokenSymbol,
+            amount: params.amount,
+        });
 
         // Notify backend to credit user account
         const response = await fetch(`${this.backendUrl}/api/fund-credits`, {
